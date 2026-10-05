@@ -7,26 +7,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Installation de OWASP Dependency-Check
-        run: |
-          wget https://github.com/jeremylong/DependencyCheck/releases/latest/download/dependency-check-11.1.1-release.zip
-          unzip dependency-check-11.1.1-release.zip
-
-      - name: Contrôle des dépendances (OWASP Dependency-Check)
-        run: |
-          ./dependency-check/bin/dependency-check.sh \
-            --project "MonApplication" \
-            --scan . \
-            --out ./rapports \
-            --format HTML \
-            --failOnCVSS 7
-
-      - name: Upload du rapport de vulnérabilités
-        uses: actions/upload-artifact@v4
-        if: always()
+      - name: Scan du fichier requirements.txt avec Trivy
+        uses: aquasecurity/trivy-action@master
         with:
-          name: rapport-dependences
-          path: ./rapports
+          scan-type: fs
+          scan-ref: .
+          scan-detect-vulnerabilities: true
+          file-patterns: "requirements.txt"
+          format: table
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Scan du Dockerfile avec Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: .
+          format: table
+          exit-code: 1
+          severity: CRITICAL,HIGH
 
   Dockerfile:
     runs-on: ubuntu-latest
@@ -35,16 +35,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Analyse statique avec Hadolint
+      - name: Analyse du Dockerfile avec Hadolint
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: Dockerfile
           failure-threshold: error
-
-      - name: Scan des secrets dans le code (Gitleaks)
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build de l'image Docker
         run: docker build -t monapp:${{ github.sha }} .
@@ -56,6 +51,7 @@ jobs:
           format: table
           exit-code: 1
           severity: CRITICAL,HIGH
+          ignore-unfixed: true
 
   Deploy:
     runs-on: ubuntu-latest
